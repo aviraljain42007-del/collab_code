@@ -33,7 +33,7 @@ async function bootstrap() {
     logger.info({ port: config.port }, 'Room Service listening')
   })
 
-  const io = initSocket(server, { config })
+  const io = await initSocket(server, { config })
 
   // io ko req mein attach karo (internal emit ke liye)
   app.use((req, res, next) => {
