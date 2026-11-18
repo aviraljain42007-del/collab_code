@@ -1,55 +1,60 @@
-import { executionQueue } from './execution.queue.js'
+import { Kafka } from 'kafkajs'
 import { MongoExecutionRepository } from './mongo-execution.repository.js'
 import { ExecutorFactory } from './executor/ExecutorFactory.js'
 import { logger } from '../../shared/logger.js'
+import axios from 'axios'
 
 const repo = new MongoExecutionRepository()
 
-// io instance pass karna padega taaki worker result broadcast kar sake
-export function startExecutionWorker(io) {
-  logger.info('Execution Worker started')
+const kafka = new Kafka({
+  clientId: 'execution-worker',
+  brokers: [process.env.KAFKA_BROKER || 'localhost:9092']
+})
+
+const consumer = kafka.consumer({ groupId: 'execution-group' })
+
+export async function startExecutionWorker() {
+  await consumer.connect()
+  await consumer.subscribe({ topic: 'execution.requested', fromBeginning: true })
   
-  // Continuous processing loop
-  setInterval(async () => {
-    if (executionQueue.size() === 0) return
-    
-    const jobId = executionQueue.dequeue()
-    if (!jobId) return
+  logger.info('Execution Worker (Kafka Consumer) started')
 
-    try {
-      // 1. Get job details from DB
-      const job = await repo.findById(jobId)
-      if (!job || job.status !== 'queued') return
+  await consumer.run({
+    eachMessage: async ({ topic, partition, message }) => {
+      const job = JSON.parse(message.value.toString())
+      logger.info({ jobId: job.id }, 'Worker picked up job from Kafka')
 
-      // 2. Mark as running
-      await repo.updateStatus(jobId, 'running')
+      try {
+        await repo.updateStatus(job.id, 'running')
 
-      // 3. Execute
-      const executor = ExecutorFactory.getExecutor(job.language)
-      const result = await executor.execute(job.code, job.language)
+        const executor = ExecutorFactory.getExecutor(job.language)
+        const result = await executor.execute(job.code, job.language)
 
-      // 4. Update DB with result
-      const finalStatus = result.exitCode === 0 ? 'completed' : 'failed'
-      await repo.updateStatus(jobId, finalStatus, result)
+        const finalStatus = result.exitCode === 0 ? 'completed' : 'failed'
+        await repo.updateStatus(job.id, finalStatus, result)
 
-      // 5. Notify WebSocket clients in the room
-      const payload = {
-        jobId: job.id,
-        roomId: job.roomId,
-        status: finalStatus,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode
+        const payload = {
+          jobId: job.id,
+          roomId: job.roomId,
+          status: finalStatus,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode
+        }
+        
+        // Notify Room Service
+        await axios.post(`${process.env.ROOM_SERVICE_URL}/api/v1/rooms/internal/emit`, {
+          roomId: job.roomId,
+          event: 'execution:completed',
+          payload
+        })
+
+        logger.info({ jobId: job.id, status: finalStatus }, 'Job executed successfully')
+
+      } catch (err) {
+        logger.error({ err, jobId: job.id }, 'Worker failed to execute job')
+        await repo.updateStatus(job.id, 'failed', { stderr: 'Internal worker error', exitCode: 1 })
       }
-      
-      // 'execution:completed' event bhejte hain room ke sabko
-      if (io) io.to(job.roomId).emit('execution:completed', payload)
-      
-      logger.info({ jobId, status: finalStatus }, 'job executed')
-
-    } catch (err) {
-      logger.error({ err, jobId }, 'worker failed to execute job')
-      await repo.updateStatus(jobId, 'failed', { stderr: 'Internal worker error', exitCode: 1 })
-    }
-  }, 500) // Har 500ms mein queue check karega
+    },
+  })
 }

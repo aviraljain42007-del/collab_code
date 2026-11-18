@@ -1,12 +1,13 @@
 import axios from "axios";
-import { executionQueue } from "./execution.queue.js";
+import { publishExecutionJob } from "../../shared/kafka.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { checkExecutionRateLimit } from "../../shared/rate-limiter.js"; // <-- YEH IMPORT MISSING THA
 
 export class ExecutionService {
   constructor(executionRepository) {
     this.execRepo = executionRepository;
-    this.roomServiceUrl = process.env.ROOM_SERVICE_URL || "http://localhost:3002";
+    this.roomServiceUrl =
+      process.env.ROOM_SERVICE_URL || "http://localhost:3002";
   }
 
   // Sirf EK HI submitJob hoga ab
@@ -22,7 +23,7 @@ export class ExecutionService {
           headers: {
             "x-internal-secret": process.env.INTERNAL_SECRET || "dev-secret",
           },
-        }
+        },
       );
     } catch (err) {
       if (err.response && err.response.status === 404) {
@@ -46,11 +47,10 @@ export class ExecutionService {
       code,
     });
 
-    // 4. Enqueue
+    // 4. Publish to Kafka
     if (job.status === "queued") {
-      executionQueue.enqueue(job.id);
+      await publishExecutionJob(job);
     }
-
     return job;
   }
 

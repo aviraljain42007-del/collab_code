@@ -13,10 +13,12 @@ import { ExecutionController } from './modules/execution/execution.controller.js
 import { executionRouter } from './modules/execution/execution.routes.js'
 import { startExecutionWorker } from './modules/execution/execution.worker.js'
 import { connectRedis } from './shared/redis.js'
+import { connectKafka } from './shared/kafka.js'
 
 async function bootstrap() {
   await connectAll()
   await connectRedis()
+  await connectKafka()
 
   const executionRepository = new MongoExecutionRepository()
   const executionService = new ExecutionService(executionRepository) // roomRepo nahi chahiye ab
