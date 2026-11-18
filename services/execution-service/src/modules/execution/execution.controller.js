@@ -3,9 +3,9 @@ import { z } from 'zod'
 
 export const submitJobSchema = z.object({
   roomId: z.string().min(1),
-  language: z.enum(['javascript', 'python', 'cpp']),
+  language: z.enum(['javascript', 'python', 'cpp', 'java']), // Java add kiya
   code: z.string().min(1),
-  clientRequestId: z.string().uuid(), // Must be UUID from frontend
+  clientRequestId: z.string().uuid(),
 })
 
 export class ExecutionController {

@@ -1,13 +1,8 @@
-import { FakeExecutor } from './FakeExecutor.js'
+import { DockerExecutor } from './DockerExecutor.js'
 
 export class ExecutorFactory {
   static getExecutor(language) {
-    // Phase 11 mein yahan language-wise Docker executors aayenge
-    // switch(language) {
-    //   case 'javascript': return new JsDockerExecutor()
-    //   ...
-    // }
-    
-    return new FakeExecutor()
+    // Ab asli Docker executor use karenge
+    return new DockerExecutor()
   }
 }

@@ -5,7 +5,7 @@
 export class CodeExecutor {
   /**
    * @param {string} code - The code to execute
-   * @param {string} language - javascript | python | cpp
+   * @param {string} language - javascript | python | cpp | java
    * @returns {Promise<{ stdout: string, stderr: string, exitCode: number }>}
    */
   async execute(code, language) {

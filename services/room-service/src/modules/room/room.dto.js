@@ -3,7 +3,7 @@ import { z } from 'zod'
 // ── Request schemas ──
 export const createRoomSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
-  language: z.enum(['javascript', 'python', 'cpp']).default('javascript'),
+  language: z.enum(['javascript', 'python', 'cpp' , 'java']).default('javascript'),
 })
 
 // ── Response mappers (explicit — no accidental leaks) ──

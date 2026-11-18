@@ -12,7 +12,7 @@ const codeSnapshotSchema = new mongoose.Schema(
     code: { type: String, default: "" },
     language: {
       type: String,
-      enum: ["javascript", "python", "cpp"],
+      enum: ["javascript", "python", "cpp" , "java"],
       required: true,
     },
   },

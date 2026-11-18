@@ -8,7 +8,7 @@ const executionJobSchema = new mongoose.Schema(
     clientRequestId: { type: String, required: true, index: true }, // Deduplication
     language: {
       type: String,
-      enum: ['javascript', 'python', 'cpp'],
+      enum: ['javascript', 'python', 'cpp' , 'java'],
       required: true,
     },
     code: { type: String, required: true },
