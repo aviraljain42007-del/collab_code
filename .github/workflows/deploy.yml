@@ -1,15 +1,19 @@
 name: Build and Push Microservices
 
-# Yeh pipeline tab chalega jab tu 'main' branch pe push karega
 on:
   push:
     branches: [ "main" ]
+
+# 👇 Yeh permissions GHCR mein push karne ke liye sabse zaroori hain
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     
-    # Matrix strategy: Hum ek saath saari services build karenge
+    # Matrix strategy: Saari 4 services parallel mein build hongi
     strategy:
       matrix:
         service: [auth-service, room-service, execution-service, api-gateway]
@@ -26,7 +30,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # GitHub automatically provides a token to push images
+          # GITHUB_TOKEN use kar rahe hain kyunki upar permissions likhi hain
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.service }}
@@ -34,8 +38,6 @@ jobs:
         with:
           context: ./services/${{ matrix.service }}
           push: true
-          # Image ka naam: ghcr.io/username/repo/service-name:latest
           tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
-          # Caching use karenge taaki build fast ho
           cache-from: type=gha
           cache-to: type=gha,mode=max
