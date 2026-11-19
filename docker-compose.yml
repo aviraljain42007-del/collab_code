@@ -1,11 +1,10 @@
 services:
+  # ── Databases & Brokers ──
   redis:
     image: redis:7-alpine
     container_name: collabcode-redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis-data:/data
     restart: unless-stopped
 
   kafka:
@@ -24,13 +23,55 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       CLUSTER_ID: '4L6g3nShT-eMCtK--X86sw'
-    volumes:
-      - kafka-data:/var/lib/kafka/data
     restart: unless-stopped
 
-volumes:
-  redis-data:
-  kafka-data:
+  # ── Microservices ──
+  auth-service:
+    build: ./services/auth-service
+    container_name: collabcode-auth
+    env_file: ./services/auth-service/.env
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  room-service:
+    build: ./services/room-service
+    container_name: collabcode-room
+    env_file: ./services/room-service/.env
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  execution-service:
+    build: ./services/execution-service
+    container_name: collabcode-execution
+    env_file: ./services/execution-service/.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # <-- IMPORTANT: Docker inside Docker! (Taaki execution service naye containers spin kar sake)
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - kafka
+
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: collabcode-gateway
+    env_file: ./services/api-gateway/.env
+    restart: unless-stopped
+    depends_on:
+      - auth-service
+      - room-service
+      - execution-service
+
+  # ── Reverse Proxy (Load Balancer) ──
+  nginx:
+    build: ./nginx
+    container_name: collabcode-nginx
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+
+      
