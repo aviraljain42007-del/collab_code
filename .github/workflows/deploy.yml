@@ -52,13 +52,13 @@ jobs:
       - name: Trigger Render Deploy for ${{ matrix.service }}
         run: |
           if [ "${{ matrix.service }}" == "auth-service" ]; then
-            curl -s -X POST ${{ secrets.RENDER_AUTH_HOOK }}
+            curl -s -X POST ${{ secrets.FOR_AUTH }}
           elif [ "${{ matrix.service }}" == "room-service" ]; then
-            curl -s -X POST ${{ secrets.RENDER_ROOM_HOOK }}
+            curl -s -X POST ${{ secrets.FOR_ROOM }}
           elif [ "${{ matrix.service }}" == "execution-service" ]; then
-            curl -s -X POST ${{ secrets.RENDER_EXEC_HOOK }}
+            curl -s -X POST ${{ secrets.FOR_EXE }}
           elif [ "${{ matrix.service }}" == "api-gateway" ]; then
-            curl -s -X POST ${{ secrets.RENDER_GATEWAY_HOOK }}
+            curl -s -X POST ${{ secrets.FOR_GATEWAY }}
           elif [ "${{ matrix.service }}" == "runner-service" ]; then
-            curl -s -X POST ${{ secrets.RENDER_RUNNER_HOOK }}
+            curl -s -X POST ${{ secrets.FOR_RUNNING }}
           fi
