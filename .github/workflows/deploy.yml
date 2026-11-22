@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
 
-# 👇 Yeh permissions GHCR mein push karne ke liye sabse zaroori hain
+# Yeh permissions GHCR mein push karne ke liye sabse zaroori hain
 permissions:
   contents: read
   packages: write
