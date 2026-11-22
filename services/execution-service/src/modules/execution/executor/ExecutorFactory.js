@@ -1,8 +1,8 @@
-import { DockerExecutor } from './DockerExecutor.js'
+import { HttpExecutor } from './HttpExecutor.js'
 
 export class ExecutorFactory {
   static getExecutor(language) {
-    // Ab asli Docker executor use karenge
-    return new DockerExecutor()
+    // Ab hum HttpExecutor use karenge jo runner-service ko call karega
+    return new HttpExecutor()
   }
 }

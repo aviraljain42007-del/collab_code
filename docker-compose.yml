@@ -43,16 +43,22 @@ services:
     depends_on:
       - redis
 
+  runner-service:
+    build: ./services/runner-service
+    container_name: collabcode-runner
+    restart: unless-stopped
+
   execution-service:
     build: ./services/execution-service
     container_name: collabcode-execution
     env_file: ./services/execution-service/.env
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock # <-- IMPORTANT: Docker inside Docker! (Taaki execution service naye containers spin kar sake)
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock # Ab iski zaroorat nahi hai
     restart: unless-stopped
     depends_on:
       - redis
       - kafka
+      - runner-service # Add kiya
 
   api-gateway:
     build: ./services/api-gateway

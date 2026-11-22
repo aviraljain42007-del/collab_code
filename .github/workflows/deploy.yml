@@ -16,7 +16,7 @@ jobs:
     # Matrix strategy: Saari 4 services parallel mein build hongi
     strategy:
       matrix:
-        service: [auth-service, room-service, execution-service, api-gateway]
+        service: [auth-service, room-service, execution-service, api-gateway , runner-service]
     
     steps:
       - name: Checkout repository
@@ -41,3 +41,4 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          

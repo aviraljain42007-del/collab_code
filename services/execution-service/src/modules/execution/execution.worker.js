@@ -3,12 +3,26 @@ import { MongoExecutionRepository } from './mongo-execution.repository.js'
 import { ExecutorFactory } from './executor/ExecutorFactory.js'
 import { logger } from '../../shared/logger.js'
 import axios from 'axios'
+import fs from 'node:fs'
+import path from 'node:path'
 
 const repo = new MongoExecutionRepository()
 
+const caPath = path.resolve(process.env.KAFKA_CA_CERT || './certs/ca.pem')
+
 const kafka = new Kafka({
-  clientId: 'execution-worker',
-  brokers: [process.env.KAFKA_BROKER || 'localhost:9092']
+  clientId: 'execution-service',
+  brokers: [process.env.KAFKA_BROKER],
+  ssl: {
+    rejectUnauthorized: true,
+    // File ko read karke buffer mein bhejo
+    ca: [fs.readFileSync(caPath, 'utf-8')],
+  },
+  sasl: {
+    mechanism: 'scram-sha-256',
+    username: process.env.KAFKA_USERNAME,
+    password: process.env.KAFKA_PASSWORD,
+  },
 })
 
 const consumer = kafka.consumer({ groupId: 'execution-group' })
