@@ -2,7 +2,7 @@ name: Build and Push Microservices
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 # 👇 Yeh permissions GHCR mein push karne ke liye sabse zaroori hain
 permissions:
@@ -12,12 +12,19 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    
+
     # Matrix strategy: Saari 4 services parallel mein build hongi
     strategy:
       matrix:
-        service: [auth-service, room-service, execution-service, api-gateway , runner-service]
-    
+        service:
+          [
+            auth-service,
+            room-service,
+            execution-service,
+            api-gateway,
+            runner-service,
+          ]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,4 +48,17 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          
+
+      - name: Trigger Render Deploy for ${{ matrix.service }}
+        run: |
+          if [ "${{ matrix.service }}" == "auth-service" ]; then
+            curl -s -X POST ${{ secrets.RENDER_AUTH_HOOK }}
+          elif [ "${{ matrix.service }}" == "room-service" ]; then
+            curl -s -X POST ${{ secrets.RENDER_ROOM_HOOK }}
+          elif [ "${{ matrix.service }}" == "execution-service" ]; then
+            curl -s -X POST ${{ secrets.RENDER_EXEC_HOOK }}
+          elif [ "${{ matrix.service }}" == "api-gateway" ]; then
+            curl -s -X POST ${{ secrets.RENDER_GATEWAY_HOOK }}
+          elif [ "${{ matrix.service }}" == "runner-service" ]; then
+            curl -s -X POST ${{ secrets.RENDER_RUNNER_HOOK }}
+          fi
