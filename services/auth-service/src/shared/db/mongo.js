@@ -30,7 +30,6 @@ export function getConnection(name) {
 }
 
 export async function connectAll() {
-  await connectMongo('auth', config.mongo.uri, config.mongo.dbNames.auth)
   await connectMongo('room', config.mongo.uri, config.mongo.dbNames.room) 
   await connectMongo('execution', config.mongo.uri, config.mongo.dbNames.execution)
 }

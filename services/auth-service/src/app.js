@@ -5,23 +5,20 @@ import pinoHttp from "pino-http";
 
 import { config } from "./shared/config/index.js";
 import { logger } from "./shared/logger.js";
-import { connectAll } from "./shared/db/mongo.js";
 import { requestId } from "./shared/middleware/requestId.js";
 import { errorHandler } from "./shared/middleware/error.middleware.js";
 
-import { MongoAuthRepository } from "./modules/auth/mongo-auth.repository.js";
 import { TokenService } from "./modules/auth/token.service.js";
 import { AuthService } from "./modules/auth/auth.service.js";
 import { AuthController } from "./modules/auth/auth.controller.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { PostgresAuthRepository } from "./modules/auth/postgres-auth.repository.js";
 
 async function bootstrap() {
-  // ── 1. Connect DB (Only Auth DB) ──
-  await connectAll();
 
   // ── 2. Dependency graph ──
-  const authRepository = new MongoAuthRepository();
-  const tokenService = new TokenService();
+  const authRepository = new PostgresAuthRepository();
+  const tokenService = new TokenService(authRepository);
   const authService = new AuthService(authRepository, tokenService);
   const authController = new AuthController(authService);
 
