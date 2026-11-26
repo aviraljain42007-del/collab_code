@@ -1,10 +1,10 @@
 import { Server } from 'socket.io'
 import { createAdapter } from '@socket.io/redis-adapter'
 import { createClient } from 'redis'
+import jwt from 'jsonwebtoken'
 import { logger } from './logger.js'
 import { registerRoomHandlers } from '../modules/room/room.ws-handler.js'
 
-// initSocket ab async ho gaya hai kyunki Redis connect karna hai
 export async function initSocket(httpServer, dependencies) {
   const { config } = dependencies
 
@@ -13,6 +13,7 @@ export async function initSocket(httpServer, dependencies) {
       origin: 'http://localhost:5173',
       credentials: true,
     },
+    transports: ['polling', 'websocket'] 
   })
 
   // ── 1. Redis Adapter Setup ──
@@ -24,14 +25,28 @@ export async function initSocket(httpServer, dependencies) {
 
   await Promise.all([pubClient.connect(), subClient.connect()])
   
-  // Socket.IO ko batao ki events Redis ke through bhejne hain
   io.adapter(createAdapter(pubClient, subClient))
   logger.info('Socket.IO Redis Adapter active')
 
   // ── 2. Authentication Middleware ──
-  // (Tera existing auth middleware code yahan aayega, bina changes ke)
   io.use((socket, next) => {
-    // ... existing JWT verify logic ...
+    const token = socket.handshake.auth?.token
+    const userName = socket.handshake.auth?.name // <-- FRONTEND SE NAME AAYEGA
+
+    if (!token) return next(new Error('UNAUTHORIZED: Missing access token'))
+
+    try {
+      const payload = jwt.verify(token, config.jwt.accessSecret)
+      if (!payload || typeof payload !== 'object' || !payload.userId) {
+        return next(new Error('UNAUTHORIZED: Invalid or expired access token'))
+      }
+
+      socket.userId = payload.userId
+      socket.userName = userName || 'Anonymous User' // <-- NAME SAVE HO GAYA
+      next()
+    } catch {
+      next(new Error('UNAUTHORIZED: Invalid or expired access token'))
+    }
   })
 
   // ── 3. Connection Handler ──

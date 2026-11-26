@@ -1,178 +1,157 @@
 import { logger } from "../../shared/logger.js";
 import { roomStateManager } from "./room-state.manager.js";
-import { RoomNotFoundError } from "./room.errors.js";
 
 export function registerRoomHandlers(io, socket, { roomService }) {
   const log = logger.child({ socketId: socket.id, userId: socket.userId });
 
-  // ── Event: room:join ──
-  socket.on("room:join", async ({ roomCode }, callback) => {
+  socket.on("room:join", async ({ roomCode } = {}, callback) => {
     try {
-      // 1. Service ke through DB mein join karo (limit check, expiry check, etc.)
-      const { room, participants } = await roomService.joinRoom(
-        roomCode,
-        socket.userId,
-      );
+      const { room } = await roomService.joinRoom(roomCode, socket.userId);
       const roomId = room.id;
 
-      // 2. Socket.IO ke logical room mein add karo
-      socket.join(roomId);
+      await socket.join(roomId);
+      roomStateManager.addSocket(
+        roomId,
+        socket.userId,
+        socket.id,
+        socket.userName,
+      );
 
-      // 3. In-memory state manager mein socket add karo (multi-tab tracking)
-      roomStateManager.addSocket(roomId, socket.userId, socket.id);
-
-      // 4. Baaki sabko notify karo ki naya user aaya hai
       socket.to(roomId).emit("room:user-joined", {
         userId: socket.userId,
+        name: socket.userName,
         roomId,
       });
 
-      // 5. Naye user ko current presence list bhejo
       const presence = roomStateManager.getPresence(roomId);
+      const state = roomStateManager.get(roomId);
       socket.emit("presence:sync", { roomId, presence });
-
       log.info({ roomId }, "socket joined room");
 
-      if (callback) callback({ success: true, room, participants });
+      callback?.({
+        success: true,
+        room,
+        snapshot: state
+          ? {
+              code: state.code,
+              language: state.language,
+              version: state.version,
+            }
+          : null,
+        participants: presence,
+      });
     } catch (err) {
       log.warn({ err, roomCode }, "socket join failed");
-      if (callback)
-        callback({ success: false, error: err.message, code: err.code });
+      callback?.({ success: false, error: err.message, code: err.code });
     }
   });
 
-  // ── Event: room:leave (Explicit leave) ──
-  socket.on("room:leave", async ({ roomId }, callback) => {
-    try {
-      await handleLeave(socket, roomId, { roomService, io });
-      if (callback) callback({ success: true });
-    } catch (err) {
-      if (callback) callback({ success: false, error: err.message });
+  socket.on("room:leave", async ({ roomId } = {}, callback) => {
+    if (!roomId || !socket.rooms.has(roomId)) {
+      callback?.({ success: false, error: "Not in room" });
+      return;
     }
+
+    await handleLeave(socket, roomId, { roomService, io });
+    callback?.({ success: true });
   });
 
-  // ── Event: code:update (Live Code Sync) ──
-  socket.on(
-    "code:update",
-    async ({ roomId, expectedVersion, newCode }, callback) => {
-      // 1. Check: user is actually in this room?
-      if (!socket.rooms.has(roomId)) {
-        return callback && callback({ success: false, error: "Not in room" });
-      }
-
-      try {
-        // 2. In-memory state update (with version check)
-        const result = roomStateManager.applyCodeUpdate(
-          roomId,
-          expectedVersion,
-          newCode,
-        );
-
-        // 3. Conflict? (Client had old version)
-        if (!result.success) {
-          socket.emit("code:conflict", {
-            roomId,
-            currentVersion: result.currentVersion,
-            code: result.code,
-          });
-          return (
-            callback && callback({ success: false, error: "Version mismatch" })
-          );
-        }
-
-        // 4. Broadcast to others (except sender)
-        socket.to(roomId).emit("code:update", {
-          roomId,
-          newCode: result.code,
-          version: result.currentVersion,
-          senderId: socket.userId,
-        });
-
-        // 5. Touch Room (update lastActivityAt in DB - fire and forget)
-        const { MongoRoomRepository } =
-          await import("./mongo-room.repository.js");
-        const repo = new MongoRoomRepository();
-        repo
-          .touchRoom(roomId)
-          .catch((err) => log.error({ err, roomId }, "touchRoom failed"));
-
-        if (callback)
-          callback({ success: true, version: result.currentVersion });
-      } catch (err) {
-        log.error({ err, roomId }, "code:update failed");
-        if (callback) callback({ success: false, error: err.message });
-      }
-    },
-  );
-
-  // ── Event: language:change ──
-  socket.on("language:change", async ({ roomId, language }, callback) => {
-    if (!socket.rooms.has(roomId)) {
-      return callback && callback({ success: false, error: "Not in room" });
+  socket.on("code:update", ({ roomId, newCode } = {}, callback) => {
+    if (!roomId || !socket.rooms.has(roomId)) {
+      callback?.({ success: false, error: "Not in room" });
+      return;
+    }
+    if (typeof newCode !== "string") {
+      callback?.({ success: false, error: "Code must be a string" });
+      return;
     }
 
     try {
-      const newVersion = roomStateManager.updateLanguage(roomId, language);
+      const state = roomStateManager.get(roomId);
+      if (!state) {
+        callback?.({ success: false, error: "Room state is unavailable" });
+        return;
+      }
 
-      // Broadcast to others
-      socket.to(roomId).emit("language:change", {
+      const result = roomStateManager.applyCodeUpdate(
         roomId,
-        language,
-        version: newVersion,
+        state.version,
+        newCode,
+      );
+      socket.to(roomId).emit("code:update", {
+        roomId,
+        newCode: result.code,
+        version: result.currentVersion,
         senderId: socket.userId,
       });
-
-      // Update DB
-      const { MongoRoomRepository } =
-        await import("./mongo-room.repository.js");
-      const repo = new MongoRoomRepository();
-      repo
-        .updateRoomLanguage(roomId, language)
-        .catch((err) =>
-          log.error({ err, roomId }, "updateRoomLanguage failed"),
-        );
-
-      if (callback) callback({ success: true, version: newVersion });
+      callback?.({ success: true, version: result.currentVersion });
     } catch (err) {
-      log.error({ err, roomId }, "language:change failed");
-      if (callback) callback({ success: false, error: err.message });
+      log.error({ err, roomId }, "code:update failed");
+      callback?.({ success: false, error: err.message });
     }
   });
-  // ── Event: chat:send ──
-  socket.on('chat:send', async ({ roomId, text }, callback) => {
-    if (!socket.rooms.has(roomId)) {
-      return callback && callback({ success: false, error: 'Not in room' })
+
+  socket.on("language:change", ({ roomId, language } = {}, callback) => {
+    if (!roomId || !socket.rooms.has(roomId)) {
+      callback?.({ success: false, error: "Not in room" });
+      return;
+    }
+    if (!["javascript", "python", "cpp", "java"].includes(language)) {
+      callback?.({ success: false, error: "Unsupported language" });
+      return;
     }
 
-    if (!text || text.trim().length === 0) {
-      return callback && callback({ success: false, error: 'Message cannot be empty' })
+    const version = roomStateManager.updateLanguage(roomId, language);
+    if (version === null) {
+      callback?.({ success: false, error: "Room state is unavailable" });
+      return;
+    }
+
+    socket.to(roomId).emit("language:change", {
+      roomId,
+      language,
+      version,
+      senderId: socket.userId,
+    });
+    callback?.({ success: true, version });
+  });
+
+  socket.on("chat:send", async ({ roomId, text } = {}, callback) => {
+    if (!roomId || !socket.rooms.has(roomId)) {
+      callback?.({ success: false, error: "Not in room" });
+      return;
+    }
+
+    const messageText = typeof text === "string" ? text.trim() : "";
+    if (!messageText) {
+      callback?.({ success: false, error: "Message cannot be empty" });
+      return;
+    }
+    if (messageText.length > 1000) {
+      callback?.({
+        success: false,
+        error: "Message cannot exceed 1000 characters",
+      });
+      return;
     }
 
     try {
-      // 1. DB mein save karo (Q4 decision: DB pehle, phir broadcast)
       const message = await roomService.saveChatMessage({
         roomId,
         senderId: socket.userId,
-        text: text.trim(),
-      })
-
-      // 2. Room ke sabko broadcast karo (including sender)
-      io.to(roomId).emit('chat:message', message)
-
-      if (callback) callback({ success: true, messageId: message.id })
+        text: messageText,
+      });
+      io.to(roomId).emit("chat:message", message);
+      callback?.({ success: true, messageId: message.id });
     } catch (err) {
-      log.error({ err, roomId }, 'chat:send failed')
-      if (callback) callback({ success: false, error: 'Failed to send message' })
+      log.error({ err, roomId }, "chat:send failed");
+      callback?.({ success: false, error: "Failed to send message" });
     }
-  })
-  // ── Event: disconnect (Network drop / Tab close) ──
+  });
+
   socket.on("disconnect", async () => {
     log.info("socket disconnected");
-
-    // User multiple rooms mein ho sakta hai, sabko handle karo
-    // socket.rooms ek Set hota hai jisme socket.id aur joined roomIds hote hain
-    const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
-
+    const rooms = Array.from(socket.rooms).filter((roomId) => roomId !== socket.id);
     for (const roomId of rooms) {
       await handleLeave(socket, roomId, {
         roomService,
@@ -183,50 +162,38 @@ export function registerRoomHandlers(io, socket, { roomService }) {
   });
 }
 
-// ── Shared Leave Logic ──
 async function handleLeave(
   socket,
   roomId,
   { roomService, io, isDisconnect = false },
 ) {
-  // 1. Socket.IO room se nikaalo (disconnect pe automatic hota hai, but explicit pe manual)
-  if (!isDisconnect) {
-    socket.leave(roomId);
-  }
+  if (!isDisconnect) socket.leave(roomId);
 
-  // 2. State manager se socket remove karo
   const { fullyOffline } = roomStateManager.removeSocket(
     roomId,
     socket.userId,
     socket.id,
   );
+  if (!fullyOffline) return;
 
-  // 3. Agar user ke saare tabs band ho gaye hain, tabhi DB update karo
-  if (fullyOffline) {
-    try {
-      if (isDisconnect) {
-        // Disconnect pe 'offline' mark karo (grace period Phase 5 part 3 mein aayega)
-        // Abhi ke liye hum offline mark kar rahe hain
-        const { MongoRoomRepository } =
-          await import("./mongo-room.repository.js");
-        const repo = new MongoRoomRepository();
-        await repo.updateParticipantStatus(roomId, socket.userId, "offline");
-      } else {
-        // Explicit leave
-        await roomService.leaveRoomById(roomId, socket.userId);
-      }
-
-      // 4. Baaki sabko notify karo
-      io.to(roomId).emit("room:user-left", { userId: socket.userId, roomId });
-
-      // 5. Updated presence broadcast karo
-      const presence = roomStateManager.getPresence(roomId);
-      io.to(roomId).emit("presence:sync", { roomId, presence });
-    } catch (err) {
-      logger.error(
-        { err, roomId, userId: socket.userId },
-        "leave handling failed",
-      );
+  try {
+    if (isDisconnect) {
+      const { MongoRoomRepository } = await import("./mongo-room.repository.js");
+      const repo = new MongoRoomRepository();
+      await repo.updateParticipantStatus(roomId, socket.userId, "offline");
+    } else {
+      await roomService.leaveRoomById(roomId, socket.userId);
     }
+
+    io.to(roomId).emit("room:user-left", { userId: socket.userId, roomId });
+    io.to(roomId).emit("presence:sync", {
+      roomId,
+      presence: roomStateManager.getPresence(roomId),
+    });
+  } catch (err) {
+    logger.error(
+      { err, roomId, userId: socket.userId },
+      "leave handling failed",
+    );
   }
 }

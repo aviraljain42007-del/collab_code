@@ -68,16 +68,17 @@ export class RoomStateManager {
   /**
    * Q5: Ephemeral socket tracking (Multiple tabs)
    */
-  addSocket(roomId, userId, socketId) {
+  addSocket(roomId, userId, socketId, name) {
     const state = this.rooms.get(roomId)
     if (!state) return
 
     if (!state.participants.has(userId)) {
-      state.participants.set(userId, { socketIds: new Set(), status: 'online' })
+      state.participants.set(userId, { socketIds: new Set(), status: 'online', name })
     }
     const p = state.participants.get(userId)
     p.socketIds.add(socketId)
     p.status = 'online'
+    if (name) p.name = name
   }
 
   removeSocket(roomId, userId, socketId) {
@@ -99,6 +100,7 @@ export class RoomStateManager {
     if (!state) return []
     return Array.from(state.participants.entries()).map(([userId, p]) => ({
       userId,
+      name: p.name,
       status: p.status,
     }))
   }

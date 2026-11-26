@@ -4,7 +4,7 @@ import { getConnection } from '../../shared/db/mongo.js'
 const participantSchema = new mongoose.Schema(
   {
     roomId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    userId: { type: String, required: true, index: true },
     status: {
       type: String,
       enum: ['online', 'offline', 'left'],

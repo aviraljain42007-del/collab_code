@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 
-const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export function generateRoomCode(length = 6) {
   const bytes = crypto.randomBytes(length)

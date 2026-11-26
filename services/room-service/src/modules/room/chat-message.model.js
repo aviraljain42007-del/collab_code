@@ -4,7 +4,7 @@ import { getConnection } from '../../shared/db/mongo.js'
 const chatMessageSchema = new mongoose.Schema(
   {
     roomId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-    senderId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    senderId: { type: String, required: true },
     text: { type: String, required: true, trim: true, maxlength: 1000 },
   },
   { timestamps: { createdAt: true, updatedAt: false } } // Chat is immutable

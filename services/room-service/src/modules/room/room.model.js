@@ -13,7 +13,7 @@ const roomSchema = new mongoose.Schema(
     },
     name: { type: String, required: true, trim: true, maxlength: 60 },
     hostId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       required: true,
       index: true,
     },

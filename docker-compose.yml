@@ -51,6 +51,8 @@ services:
   execution-service:
     build: ./services/execution-service
     container_name: collabcode-execution
+    ports:
+    - "3002:3002"
     env_file: ./services/execution-service/.env
     # volumes:
     #   - /var/run/docker.sock:/var/run/docker.sock # Ab iski zaroorat nahi hai
